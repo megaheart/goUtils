@@ -67,6 +67,10 @@ func (s *PrimitiveSet[T]) Add(value T) bool {
 	// }
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
+	if len(s.Array) == 0 {
+		s.Array = append(s.Array, value)
+		return true
+	}
 	// binary search to find the position to insert
 	a, b := 0, len(s.Array)-1
 	mid := (a + b) / 2

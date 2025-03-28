@@ -8,7 +8,7 @@ import (
 
 func main() {
 	s := goUtils.NewPrimitiveSetWithInitValues[int](
-		[]int{1, 2, 3, 4, 5},
+		[]int{},
 	)
 
 	s.Add(2)

@@ -33,6 +33,18 @@ func TestPrimitiveSet_Add(t *testing.T) {
 		expected   []int
 		timeoutMS  float32
 	}{
+		{"ZeroLen_Add", []int{}, 106, []int{106}, 2000},
+
+		{"Len1_Add_Last", []int{1}, 2, []int{1, 2}, 2000},
+		{"Len1_Add_First", []int{2}, 1, []int{1, 2}, 2000},
+		{"Len1_Add_Duplicated", []int{2}, 2, []int{2}, 2000},
+
+		{"Len2_Add_Last", []int{1, 2}, 3, []int{1, 2, 3}, 2000},
+		{"Len2_Add_First", []int{2, 3}, 1, []int{1, 2, 3}, 2000},
+		{"Len2_Add_Mid", []int{1, 3}, 2, []int{1, 2, 3}, 2000},
+		{"Len2_Add_Duplicated1", []int{1, 2}, 2, []int{1, 2}, 2000},
+		{"Len2_Add_Duplicated2", []int{1, 2}, 1, []int{1, 2}, 2000},
+
 		{"OddLen_Add_Last", []int{1, 2, 3, 4, 5}, 6, []int{1, 2, 3, 4, 5, 6}, 2000},
 		{"OddLen_Add_First", []int{2, 3, 8, 12, 16}, 1, []int{1, 2, 3, 8, 12, 16}, 2000},
 		{"OddLen_Add_Mid", []int{2, 3, 8, 12, 16}, 9, []int{2, 3, 8, 9, 12, 16}, 2000},
@@ -78,6 +90,21 @@ func TestPrimitiveSet_Contains(t *testing.T) {
 		expected     bool
 		timeoutMS    float32
 	}{
+		{"ZeroLen_NotContains", []int{}, 106, false, 2000},
+		{"ZeroLen_NotContains", []int{}, -2, false, 2000},
+
+		{"Len1_Contains", []int{1}, 1, true, 2000},
+		{"Len1_NotContains", []int{2}, 1, false, 2000},
+		{"Len1_NotContains2", []int{2}, 3, false, 2000},
+
+		{"Len2_Contains_Last", []int{1, 2}, 2, true, 2000},
+		{"Len2_Contains_First", []int{2, 3}, 2, true, 2000},
+		{"Len2_NotContains1", []int{1, 3}, 2, false, 2000},
+		{"Len2_NotContains2", []int{1, 3}, 0, false, 2000},
+		{"Len2_NotContains3", []int{1, 3}, 4, false, 2000},
+		{"Len2_NotContains4", []int{1, 3}, -2, false, 2000},
+		{"Len2_NotContains5", []int{1, 3}, 40, false, 2000},
+
 		{"OddLen_Contains_Last", []int{1, 2, 3, 4, 5}, 5, true, 2000},
 		{"OddLen_Contains_First", []int{2, 3, 8, 12, 16}, 2, true, 2000},
 		{"OddLen_Contains_Mid", []int{2, 3, 8, 12, 16}, 8, true, 2000},
@@ -122,6 +149,23 @@ func TestPrimitiveSet_SearchIndex(t *testing.T) {
 		expected     int
 		timeoutMS    float32
 	}{
+		{"ZeroLen_SearchIndex", []int{}, 106, -1, 2000},
+		{"ZeroLen_SearchIndex", []int{}, -2, -1, 2000},
+
+		{"Len1_SearchIndex", []int{1}, 1, 0, 2000},
+		{"Len1_FailSearchIndex", []int{2}, 1, -1, 2000},
+		{"Len1_FailSearchIndex2", []int{2}, 3, -1, 2000},
+		{"Len1_FailSearchIndex3", []int{2}, -2, -1, 2000},
+		{"Len1_FailSearchIndex4", []int{2}, 20, -1, 2000},
+
+		{"Len2_SearchIndex_Last", []int{1, 2}, 2, 1, 2000},
+		{"Len2_SearchIndex_First", []int{2, 3}, 2, 0, 2000},
+		{"Len2_FailSearchIndex", []int{1, 3}, 2, -1, 2000},
+		{"Len2_FailSearchIndex1", []int{1, 3}, 0, -1, 2000},
+		{"Len2_FailSearchIndex2", []int{1, 3}, 4, -1, 2000},
+		{"Len2_FailSearchIndex3", []int{1, 3}, -2, -1, 2000},
+		{"Len2_FailSearchIndex4", []int{1, 3}, 40, -1, 2000},
+
 		{"OddLen_SearchIndex_Last", []int{1, 2, 3, 4, 5}, 5, 4, 2000},
 		{"OddLen_SearchIndex_First", []int{2, 3, 8, 12, 16}, 2, 0, 2000},
 		{"OddLen_SearchIndex_Mid", []int{2, 3, 8, 12, 16}, 8, 2, 2000},
