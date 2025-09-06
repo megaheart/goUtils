@@ -1,11 +1,15 @@
 package goUtils
 
 // import "crypto/rand"
-import (
-	"math/rand"
-)
+// import (
+// 	"math/rand/v2"
+// )
 
-func PickRandom[T any](slice []T, n int) []T {
+// RandomFunc is a function type that takes two integer parameters a and b
+// and returns an integer result.
+type RandomFunc func(a, b int) int
+
+func PickRandom[T any](slice []T, n int, random RandomFunc) []T {
 	N := len(slice)
 	n = min(N, n)
 	if n < 1 {
@@ -14,24 +18,7 @@ func PickRandom[T any](slice []T, n int) []T {
 	clone := make([]T, N)
 	copy(clone, slice)
 	for i := 0; i < n; i++ {
-		j := rand.Intn(N-i) + i
-		clone[i], clone[j] = clone[j], clone[i]
-	}
-
-	return clone[:n]
-}
-
-func PickRandomWithSeed[T any](slice []T, n int, seed int64) []T {
-	N := len(slice)
-	n = min(N, n)
-	if n < 1 {
-		return []T{}
-	}
-	clone := make([]T, N)
-	copy(clone, slice)
-	random := rand.New(rand.NewSource(seed))
-	for i := 0; i < n; i++ {
-		j := random.Intn(N-i) + i
+		j := random(i, N-i) + i
 		clone[i], clone[j] = clone[j], clone[i]
 	}
 
