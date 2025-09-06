@@ -5,8 +5,7 @@ package goUtils
 // 	"math/rand/v2"
 // )
 
-// RandomFunc is a function type that takes two integer parameters a and b
-// and returns an integer result.
+// RandomFunc is a function type that return a random integer in [a, b) (inclusive a, exclusive b)
 type RandomFunc func(a, b int) int
 
 func PickRandom[T any](slice []T, n int, random RandomFunc) []T {
@@ -18,7 +17,7 @@ func PickRandom[T any](slice []T, n int, random RandomFunc) []T {
 	clone := make([]T, N)
 	copy(clone, slice)
 	for i := 0; i < n; i++ {
-		j := random(i, N-i) + i
+		j := random(i, N)
 		clone[i], clone[j] = clone[j], clone[i]
 	}
 
