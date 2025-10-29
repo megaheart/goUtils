@@ -101,81 +101,97 @@ func NewZapLogger(
 	level zapcore.Level,
 	samplerOption *ZapcoreSamplerOption,
 ) ILogger {
-	enc := buildEncoder(format, timeLayout)
-
-	// Writers
-	var sinks []zapcore.WriteSyncer
+	var cores []zapcore.Core
 
 	switch outputType {
 	case ZapLogger_Output_Console:
-		sinks = append(sinks, zapcore.AddSync(os.Stdout))
+		// console: encoder chosen according to the selected format
+		var enc zapcore.Encoder
+		if format == ZapLogger_Format_ReadableText {
+			enc = buildConsoleEncoder(timeLayout, true) // colored
+		} else {
+			enc = buildJSONEncoder()
+		}
+		cores = append(cores, zapcore.NewCore(enc, zapcore.AddSync(os.Stdout), level))
 
 	case ZapLogger_Output_File:
-		// fallback to console if no path provided
-		if logPath == "" {
-			sinks = append(sinks, zapcore.AddSync(os.Stdout))
+		// file: plain output (no color) — JSON is recommended
+		fileWS := fileSink(logPath)
+		var enc zapcore.Encoder
+		if format == ZapLogger_Format_ReadableText {
+			enc = buildConsoleEncoder(timeLayout, false) // non-colored
 		} else {
-			sinks = append(sinks, fileSink(logPath))
+			enc = buildJSONEncoder()
 		}
+		cores = append(cores, zapcore.NewCore(enc, fileWS, level))
 
 	case ZapLogger_Output_ConsoleAndFile:
-		sinks = append(sinks, zapcore.AddSync(os.Stdout))
-		if logPath != "" {
-			sinks = append(sinks, fileSink(logPath))
+		// console (colored) + file (non-colored / JSON)
+		consoleEnc := buildConsoleEncoder(timeLayout, true)
+		consoleWS := zapcore.AddSync(os.Stdout)
+
+		var fileEnc zapcore.Encoder
+		if format == ZapLogger_Format_ReadableText {
+			fileEnc = buildConsoleEncoder(timeLayout, false) // non-colored
+		} else {
+			fileEnc = buildJSONEncoder()
 		}
+		fileWS := fileSink(logPath)
+
+		cores = append(cores,
+			zapcore.NewCore(consoleEnc, consoleWS, level),
+			zapcore.NewCore(fileEnc, fileWS, level),
+		)
+
 	default:
-		// fallback to console if unknown output type (safe default)
-		sinks = append(sinks, zapcore.AddSync(os.Stdout))
+		// fallback: colored console
+		enc := buildConsoleEncoder(timeLayout, true)
+		cores = append(cores, zapcore.NewCore(enc, zapcore.AddSync(os.Stdout), level))
 	}
 
-	var core zapcore.Core
-	if len(sinks) == 1 {
-		core = zapcore.NewCore(enc, sinks[0], level)
-	} else {
-		core = zapcore.NewCore(enc, zapcore.NewMultiWriteSyncer(sinks...), level)
-	}
+	// combine cores into a single core
+	core := zapcore.NewTee(cores...)
 
-	// Sampler
+	// Sampler (optional)
 	if samplerOption != nil {
 		core = zapcore.NewSamplerWithOptions(core, samplerOption.Tick, samplerOption.First, samplerOption.Thereafter, samplerOption.Options...)
 	}
 
-	logger := zap.New(
-		core,
+	logger := zap.New(core,
 		zap.AddCaller(),
 		zap.AddStacktrace(zapcore.ErrorLevel),
 		zap.AddCallerSkip(1),
 	)
 
-	return &ZapLogger{
-		logger: logger,
-	}
+	return &ZapLogger{logger: logger}
 }
 
-// buildEncoder returns a zapcore.Encoder based on the requested format and time layout.
-// For readable text it returns a ConsoleEncoder with colorized levels; otherwise JSON Encoder.
-func buildEncoder(format ZapLogger_Format, timeLayout string) zapcore.Encoder {
-	switch format {
-	case ZapLogger_Format_ReadableText:
-		return zapcore.NewConsoleEncoder(zapcore.EncoderConfig{
-			TimeKey:        "ts",
-			LevelKey:       "level",
-			NameKey:        "logger",
-			CallerKey:      "caller",
-			MessageKey:     "msg",
-			StacktraceKey:  "stack",
-			LineEnding:     zapcore.DefaultLineEnding,
-			EncodeLevel:    zapcore.CapitalColorLevelEncoder,
-			EncodeTime:     zapcore.TimeEncoderOfLayout(timeLayout),
-			EncodeDuration: zapcore.StringDurationEncoder,
-			EncodeCaller:   zapcore.ShortCallerEncoder,
-		})
-	default: // ZapLogger_Format_Json
-		cfg := zap.NewProductionEncoderConfig()
-		cfg.EncodeTime = zapcore.ISO8601TimeEncoder
-		cfg.TimeKey = "ts"
-		return zapcore.NewJSONEncoder(cfg)
+func buildConsoleEncoder(timeLayout string, colored bool) zapcore.Encoder {
+	encCfg := zapcore.EncoderConfig{
+		TimeKey:        "ts",
+		LevelKey:       "level",
+		NameKey:        "logger",
+		CallerKey:      "caller",
+		MessageKey:     "msg",
+		StacktraceKey:  "stack",
+		LineEnding:     zapcore.DefaultLineEnding,
+		EncodeTime:     zapcore.TimeEncoderOfLayout(timeLayout),
+		EncodeDuration: zapcore.StringDurationEncoder,
+		EncodeCaller:   zapcore.ShortCallerEncoder,
 	}
+	if colored {
+		encCfg.EncodeLevel = zapcore.CapitalColorLevelEncoder
+	} else {
+		encCfg.EncodeLevel = zapcore.CapitalLevelEncoder
+	}
+	return zapcore.NewConsoleEncoder(encCfg)
+}
+
+func buildJSONEncoder() zapcore.Encoder {
+	cfg := zap.NewProductionEncoderConfig()
+	cfg.EncodeTime = zapcore.ISO8601TimeEncoder
+	cfg.TimeKey = "ts"
+	return zapcore.NewJSONEncoder(cfg)
 }
 
 // fileSink returns a WriteSyncer that writes to a rotating file using lumberjack.
