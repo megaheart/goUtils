@@ -1,7 +1,6 @@
 package appHelper
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"reflect"
@@ -9,7 +8,31 @@ import (
 	"strings"
 
 	"github.com/jedib0t/go-pretty/v6/table"
+	"github.com/spf13/cobra"
 )
+
+// Setup name for application parameter by attribute tag `appParam:"<name>"` in struct field.
+// Example:
+//
+//	type AppParamSetup struct {
+//	    MaxUploadSize int    `appParam:"max-upload-size" appParamShorthand:"m" appParamUsage:"max upload size in bytes"`
+//	    LogLevel      string `appParam:"log-level" appParamShorthand:"m" appParamUsage:"log level for the application"`
+//	}
+//
+// Then use ParseParams to get parameters values from flag args or
+// env vars and fill AppParamSetup struct. Environment variable is more priority than flag arg.
+//
+// App param name must be unique, formatted as kebab-case (e.g., "max-upload-size")
+// This setup make program auto-parse flag arg (params' names with "--" prefix,
+//
+//	e.g., "--max-upload-size") or env vars  (param's names in uppercase with underscores
+//
+// and "GO_SERVER_" prefix, e.g., "GO_SERVER_MAX_UPLOAD_SIZE") for each param.
+// Flag arg has higher priority than env var.
+func ParseParams[T any](defaultValue T, envVarNamePrefix string) (*T, error) {
+	param, _, err := ParseParamsAndSubCommands(defaultValue, envVarNamePrefix)
+	return param, err
+}
 
 // Setup name for application parameter by attribute tag `appParam:"<name>"` in struct field.
 // Example:
@@ -29,59 +52,157 @@ import (
 //
 // and "GO_SERVER_" prefix, e.g., "GO_SERVER_MAX_UPLOAD_SIZE") for each param.
 // Flag arg has higher priority than env var.
-func ParseParams[T any](defaultValue T, envVarNamePrefix string) (*T, error) {
+func ParseParamsAndSubCommands[T any](defaultValue T, envVarNamePrefix string) (*T, []string, error) {
+	commands := make([]string, 0)
+	rootCmd := &cobra.Command{
+		Use:   os.Args[0] + " [command]",
+		Short: "Demo cobra + pflag",
+		Run: func(cmd *cobra.Command, _commands []string) {
+			commands = _commands
+		},
+	}
+
 	result := &defaultValue
 	t := reflect.TypeOf(*result)
-	flagList := make([]interface{}, 0)
+	// flagList := make([]interface{}, 0)
 	for i := 0; i < t.NumField(); i++ {
 		f := t.Field(i)
 		paramName := f.Tag.Get("appParam")
 		if paramName != "" {
 			fv := reflect.ValueOf(result).Elem().FieldByName(f.Name)
+			paramShorthand := f.Tag.Get("appParamShorthand")
+			paramUsage := f.Tag.Get("appParamUsage")
+			envVarName := getEnvVarNameFromAppParamName(paramName, envVarNamePrefix)
 			if fv.IsValid() && fv.CanSet() {
 				switch fv.Kind() {
 				// String
 				case reflect.String:
 					defaultValue := fv.Interface().(string)
-					flagList = append(flagList, flag.String(paramName, defaultValue, f.Tag.Get("appParamUsage")))
+					if paramValue, ok := os.LookupEnv(envVarName); ok {
+						fv.SetString(paramValue)
+						rootCmd.Flags().StringP(paramName, paramShorthand, defaultValue, paramUsage)
+						continue
+					}
+					pointer := fv.Addr().Interface().(*string)
+					rootCmd.Flags().StringVarP(pointer, paramName, paramShorthand, defaultValue, paramUsage)
 				// Int types
 				case reflect.Int:
 					defaultValue := fv.Interface().(int)
-					flagList = append(flagList, flag.Int64(paramName, int64(defaultValue), f.Tag.Get("appParamUsage")))
+					if paramValue, ok := os.LookupEnv(envVarName); ok {
+						intVal, err := strconv.ParseInt(paramValue, 10, 64)
+						if err != nil {
+							return nil, nil, fmt.Errorf("invalid int value for param '%s': '%s'", paramName, paramValue)
+						}
+						fv.SetInt(intVal)
+						rootCmd.Flags().IntP(paramName, paramShorthand, defaultValue, paramUsage)
+						continue
+					}
+					pointer := fv.Addr().Interface().(*int)
+					rootCmd.Flags().IntVarP(pointer, paramName, paramShorthand, defaultValue, paramUsage)
 				case reflect.Int8:
 					defaultValue := fv.Interface().(int8)
-					flagList = append(flagList, flag.Int64(paramName, int64(defaultValue), f.Tag.Get("appParamUsage")))
+					if paramValue, ok := os.LookupEnv(envVarName); ok {
+						intVal, err := strconv.ParseInt(paramValue, 10, 8)
+						if err != nil {
+							return nil, nil, fmt.Errorf("invalid int8 value for param '%s': '%s'", paramName, paramValue)
+						}
+						fv.SetInt(intVal)
+						rootCmd.Flags().Int8P(paramName, paramShorthand, defaultValue, paramUsage)
+						continue
+					}
+					pointer := fv.Addr().Interface().(*int8)
+					rootCmd.Flags().Int8VarP(pointer, paramName, paramShorthand, defaultValue, paramUsage)
 				case reflect.Int16:
 					defaultValue := fv.Interface().(int16)
-					flagList = append(flagList, flag.Int64(paramName, int64(defaultValue), f.Tag.Get("appParamUsage")))
+					if paramValue, ok := os.LookupEnv(envVarName); ok {
+						intVal, err := strconv.ParseInt(paramValue, 10, 16)
+						if err != nil {
+							return nil, nil, fmt.Errorf("invalid int16 value for param '%s': '%s'", paramName, paramValue)
+						}
+						fv.SetInt(intVal)
+						rootCmd.Flags().Int16P(paramName, paramShorthand, defaultValue, paramUsage)
+						continue
+					}
+					pointer := fv.Addr().Interface().(*int16)
+					rootCmd.Flags().Int16VarP(pointer, paramName, paramShorthand, defaultValue, paramUsage)
 				case reflect.Int32:
 					defaultValue := fv.Interface().(int32)
-					flagList = append(flagList, flag.Int64(paramName, int64(defaultValue), f.Tag.Get("appParamUsage")))
+					if paramValue, ok := os.LookupEnv(envVarName); ok {
+						intVal, err := strconv.ParseInt(paramValue, 10, 32)
+						if err != nil {
+							return nil, nil, fmt.Errorf("invalid int32 value for param '%s': '%s'", paramName, paramValue)
+						}
+						fv.SetInt(intVal)
+						rootCmd.Flags().Int32P(paramName, paramShorthand, defaultValue, paramUsage)
+						continue
+					}
+					pointer := fv.Addr().Interface().(*int32)
+					rootCmd.Flags().Int32VarP(pointer, paramName, paramShorthand, defaultValue, paramUsage)
 				case reflect.Int64:
 					defaultValue := fv.Interface().(int64)
-					flagList = append(flagList, flag.Int64(paramName, defaultValue, f.Tag.Get("appParamUsage")))
+					if paramValue, ok := os.LookupEnv(envVarName); ok {
+						intVal, err := strconv.ParseInt(paramValue, 10, 64)
+						if err != nil {
+							return nil, nil, fmt.Errorf("invalid int64 value for param '%s': '%s'", paramName, paramValue)
+						}
+						fv.SetInt(intVal)
+						rootCmd.Flags().Int64P(paramName, paramShorthand, defaultValue, paramUsage)
+						continue
+					}
+					pointer := fv.Addr().Interface().(*int64)
+					rootCmd.Flags().Int64VarP(pointer, paramName, paramShorthand, defaultValue, paramUsage)
 				// Float types
 				case reflect.Float32:
 					defaultValue := fv.Interface().(float32)
-					flagList = append(flagList, flag.Float64(paramName, float64(defaultValue), f.Tag.Get("appParamUsage")))
+					if paramValue, ok := os.LookupEnv(envVarName); ok {
+						floatVal, err := strconv.ParseFloat(paramValue, 32)
+						if err != nil {
+							return nil, nil, fmt.Errorf("invalid float32 value for param '%s': '%s'", paramName, paramValue)
+						}
+						fv.SetFloat(floatVal)
+						rootCmd.Flags().Float32P(paramName, paramShorthand, defaultValue, paramUsage)
+						continue
+					}
+					pointer := fv.Addr().Interface().(*float32)
+					rootCmd.Flags().Float32VarP(pointer, paramName, paramShorthand, defaultValue, paramUsage)
+
 				case reflect.Float64:
 					defaultValue := fv.Interface().(float64)
-					flagList = append(flagList, flag.Float64(paramName, defaultValue, f.Tag.Get("appParamUsage")))
+					if paramValue, ok := os.LookupEnv(envVarName); ok {
+						floatVal, err := strconv.ParseFloat(paramValue, 64)
+						if err != nil {
+							return nil, nil, fmt.Errorf("invalid float64 value for param '%s': '%s'", paramName, paramValue)
+						}
+						fv.SetFloat(floatVal)
+						rootCmd.Flags().Float64P(paramName, paramShorthand, defaultValue, paramUsage)
+						continue
+					}
+					pointer := fv.Addr().Interface().(*float64)
+					rootCmd.Flags().Float64VarP(pointer, paramName, paramShorthand, defaultValue, paramUsage)
 				// Bool type
 				case reflect.Bool:
 					defaultValue := fv.Interface().(bool)
-					flagList = append(flagList, flag.Bool(paramName, defaultValue, f.Tag.Get("appParamUsage")))
+					if paramValue, ok := os.LookupEnv(envVarName); ok {
+						boolVal, err := strconv.ParseBool(paramValue)
+						if err != nil {
+							return nil, nil, fmt.Errorf("invalid bool value for param '%s': '%s'", paramName, paramValue)
+						}
+						fv.SetBool(boolVal)
+						rootCmd.Flags().BoolP(paramName, paramShorthand, defaultValue, paramUsage)
+						continue
+					}
+					pointer := fv.Addr().Interface().(*bool)
+					rootCmd.Flags().BoolVarP(pointer, paramName, paramShorthand, defaultValue, paramUsage)
 				default:
-					return nil, fmt.Errorf("unsupported field type: %s", fv.Kind())
+					return nil, nil, fmt.Errorf("unsupported field type: %s", fv.Kind())
 				}
 			}
 		}
 	}
 
-	wantHelp := flag.Bool("help", false, "show help message")
-	flag.Parse()
+	rootCmd.Flags().SetInterspersed(true)
 
-	if *wantHelp {
+	helpFunc := func(cmd *cobra.Command, args []string) {
 		fmt.Printf("Usage of `%s`:\n", os.Args[0])
 		usageTable := table.NewWriter()
 		usageTable.SetOutputMirror(os.Stdout)
@@ -100,79 +221,27 @@ func ParseParams[T any](defaultValue T, envVarNamePrefix string) (*T, error) {
 			if paramName != "" {
 				paramUsage := f.Tag.Get("appParamUsage")
 				flagName := "--" + paramName
+				shorthand := f.Tag.Get("appParamShorthand")
+				if shorthand != "" {
+					flagName = fmt.Sprintf("-%s, %s", shorthand, flagName)
+				}
 				envName := getEnvVarNameFromAppParamName(paramName, envVarNamePrefix)
 				usageTable.AppendRow(table.Row{flagName, envName, paramUsage})
 			}
 		}
 		usageTable.Render()
-		os.Exit(0)
 	}
+	rootCmd.SetHelpFunc(helpFunc)
 
-	for i := 0; i < t.NumField(); i++ {
-		f := t.Field(i)
-		paramName := f.Tag.Get("appParam")
-		if paramName != "" {
-			envVarName := getEnvVarNameFromAppParamName(paramName, envVarNamePrefix)
-			fv := reflect.ValueOf(result).Elem().FieldByName(f.Name)
-			if fv.IsValid() && fv.CanSet() {
-				switch fv.Kind() {
-				case reflect.String:
-					if paramValue, ok := os.LookupEnv(envVarName); ok {
-						fv.SetString(paramValue)
-						continue
-					}
-					paramValueRef := flagList[i].(*string)
-					if paramValueRef != nil {
-						fv.SetString(*paramValueRef)
-					}
-				case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-					if paramValue, ok := os.LookupEnv(envVarName); ok {
-						intVal, err := strconv.ParseInt(paramValue, 10, 64)
-						if err != nil {
-							return nil, fmt.Errorf("invalid int value for param '%s': '%s'", paramName, paramValue)
-						}
-						fv.SetInt(intVal)
-						continue
-					}
-					paramValueRef := flagList[i].(*int64)
-					if paramValueRef != nil {
-						fv.SetInt(*paramValueRef)
-					}
-				case reflect.Float32, reflect.Float64:
-					if paramValue, ok := os.LookupEnv(envVarName); ok {
-						floatVal, err := strconv.ParseFloat(paramValue, 64)
-						if err != nil {
-							return nil, fmt.Errorf("invalid float value for param '%s': '%s'", paramName, paramValue)
-						}
-						fv.SetFloat(floatVal)
-						continue
-					}
-					paramValueRef := flagList[i].(*float64)
-					if paramValueRef != nil {
-						fv.SetFloat(*paramValueRef)
-					}
-				case reflect.Bool:
-					if paramValue, ok := os.LookupEnv(envVarName); ok {
-						// convert string to bool
-						boolVal, err := strconv.ParseBool(paramValue)
-						if err != nil {
-							return nil, fmt.Errorf("invalid bool value for param '%s': '%s'", paramName, paramValue)
-						}
-						fv.SetBool(boolVal)
-						continue
-					}
-					paramValueRef := flagList[i].(*bool)
-					if paramValueRef != nil {
-						fv.SetBool(*paramValueRef)
-					}
-				// Add other types if needed
-				default:
-					return nil, fmt.Errorf("unsupported field type: %s", fv.Kind())
-				}
-			}
-		}
+	rootCmd.SetUsageFunc(func(cmd *cobra.Command) error {
+		helpFunc(cmd, nil)
+		return nil
+	})
+
+	if err := rootCmd.Execute(); err != nil {
+		return nil, nil, err
 	}
-	return result, nil
+	return result, commands, nil
 }
 
 func getEnvVarNameFromAppParamName(kebab string, envVarNamePrefix string) string {
