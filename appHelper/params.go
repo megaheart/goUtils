@@ -30,8 +30,14 @@ import (
 // and "GO_SERVER_" prefix, e.g., "GO_SERVER_MAX_UPLOAD_SIZE") for each param.
 // Flag arg has higher priority than env var.
 func ParseParams[T any](defaultValue T, envVarNamePrefix string) (*T, error) {
-	param, _, err := ParseParamsAndSubCommands(defaultValue, envVarNamePrefix)
+	param, _, err := ParseParamsAndSubCommands(defaultValue, envVarNamePrefix, nil)
 	return param, err
+}
+
+type FlagAndEnvVarInfo struct {
+	FlagName    string
+	EnvVarName  string
+	Description string
 }
 
 // Setup name for application parameter by attribute tag `appParam:"<name>"` in struct field.
@@ -52,10 +58,14 @@ func ParseParams[T any](defaultValue T, envVarNamePrefix string) (*T, error) {
 //
 // and "GO_SERVER_" prefix, e.g., "GO_SERVER_MAX_UPLOAD_SIZE") for each param.
 // Flag arg has higher priority than env var.
-func ParseParamsAndSubCommands[T any](defaultValue T, envVarNamePrefix string) (*T, []string, error) {
+func ParseParamsAndSubCommands[T any](defaultValue T, envVarNamePrefix string, overwriteHelpFunc func(info []FlagAndEnvVarInfo)) (*T, []string, error) {
 	commands := make([]string, 0)
+	programName := os.Args[0]
+	if idx := strings.LastIndex(programName, string(os.PathSeparator)); idx != -1 {
+		programName = programName[idx+1:]
+	}
 	rootCmd := &cobra.Command{
-		Use:   os.Args[0] + " [command]",
+		Use:   programName + " [command]",
 		Short: "Demo cobra + pflag",
 		Run: func(cmd *cobra.Command, _commands []string) {
 			commands = _commands
@@ -202,34 +212,61 @@ func ParseParamsAndSubCommands[T any](defaultValue T, envVarNamePrefix string) (
 
 	rootCmd.Flags().SetInterspersed(true)
 
-	helpFunc := func(cmd *cobra.Command, args []string) {
-		fmt.Printf("Usage of `%s`:\n", os.Args[0])
-		usageTable := table.NewWriter()
-		usageTable.SetOutputMirror(os.Stdout)
-		style := table.StyleDefault
-		style.Options.DrawBorder = false
-		style.Options.SeparateColumns = false
-		style.Options.SeparateHeader = false
-		style.Options.SeparateRows = false
-		usageTable.SetStyle(style)
+	var helpFunc func(cmd *cobra.Command, args []string)
+	if overwriteHelpFunc != nil {
+		helpFunc = func(cmd *cobra.Command, args []string) {
+			infoList := make([]FlagAndEnvVarInfo, 0)
+			for i := 0; i < t.NumField(); i++ {
+				f := t.Field(i)
+				paramName := f.Tag.Get("appParam")
 
-		usageTable.AppendRow(table.Row{"Flag", "Environment_Variable", "Description"})
-		for i := 0; i < t.NumField(); i++ {
-			f := t.Field(i)
-			paramName := f.Tag.Get("appParam")
-
-			if paramName != "" {
-				paramUsage := f.Tag.Get("appParamUsage")
-				flagName := "--" + paramName
-				shorthand := f.Tag.Get("appParamShorthand")
-				if shorthand != "" {
-					flagName = fmt.Sprintf("-%s, %s", shorthand, flagName)
+				if paramName != "" {
+					paramUsage := f.Tag.Get("appParamUsage")
+					flagName := "--" + paramName
+					shorthand := f.Tag.Get("appParamShorthand")
+					if shorthand != "" {
+						flagName = fmt.Sprintf("-%s, %s", shorthand, flagName)
+					}
+					envName := getEnvVarNameFromAppParamName(paramName, envVarNamePrefix)
+					infoList = append(infoList, FlagAndEnvVarInfo{
+						FlagName:    flagName,
+						EnvVarName:  envName,
+						Description: paramUsage,
+					})
 				}
-				envName := getEnvVarNameFromAppParamName(paramName, envVarNamePrefix)
-				usageTable.AppendRow(table.Row{flagName, envName, paramUsage})
 			}
+			overwriteHelpFunc(infoList)
 		}
-		usageTable.Render()
+	} else {
+		helpFunc = func(cmd *cobra.Command, args []string) {
+			fmt.Printf("Usage of `%s`:\n", programName)
+			usageTable := table.NewWriter()
+			usageTable.SetOutputMirror(os.Stdout)
+			style := table.StyleDefault
+			style.Options.DrawBorder = false
+			style.Options.SeparateColumns = false
+			style.Options.SeparateHeader = false
+			style.Options.SeparateRows = false
+			usageTable.SetStyle(style)
+
+			usageTable.AppendRow(table.Row{"Flag", "Environment_Variable", "Description"})
+			for i := 0; i < t.NumField(); i++ {
+				f := t.Field(i)
+				paramName := f.Tag.Get("appParam")
+
+				if paramName != "" {
+					paramUsage := f.Tag.Get("appParamUsage")
+					flagName := "--" + paramName
+					shorthand := f.Tag.Get("appParamShorthand")
+					if shorthand != "" {
+						flagName = fmt.Sprintf("-%s, %s", shorthand, flagName)
+					}
+					envName := getEnvVarNameFromAppParamName(paramName, envVarNamePrefix)
+					usageTable.AppendRow(table.Row{flagName, envName, paramUsage})
+				}
+			}
+			usageTable.Render()
+		}
 	}
 	rootCmd.SetHelpFunc(helpFunc)
 
