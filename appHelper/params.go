@@ -92,7 +92,7 @@ func ParseParams[T any](defaultValue T, envVarNamePrefix string) (*T, error) {
 		style.Options.SeparateRows = false
 		usageTable.SetStyle(style)
 
-		usageTable.AppendRow(table.Row{"Flag", "Environment Variable", "Description"})
+		usageTable.AppendRow(table.Row{"Flag", "Environment_Variable", "Description"})
 		for i := 0; i < t.NumField(); i++ {
 			f := t.Field(i)
 			paramName := f.Tag.Get("appParam")
