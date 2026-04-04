@@ -236,6 +236,7 @@ func ParseParamsAndSubCommands[T any](defaultValue T, envVarNamePrefix string, o
 				}
 			}
 			overwriteHelpFunc(infoList)
+			os.Exit(0)
 		}
 	} else {
 		helpFunc = func(cmd *cobra.Command, args []string) {
@@ -266,6 +267,7 @@ func ParseParamsAndSubCommands[T any](defaultValue T, envVarNamePrefix string, o
 				}
 			}
 			usageTable.Render()
+			os.Exit(0)
 		}
 	}
 	rootCmd.SetHelpFunc(helpFunc)
