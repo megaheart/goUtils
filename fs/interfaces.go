@@ -315,4 +315,7 @@ type IFileSystem interface {
 	WriteFromReader(file IFile, reader io.Reader) (int64, error)
 	// Write from io.Reader to IFile with offset
 	WriteFromReaderAt(file IFile, reader io.Reader, offset int64) (int64, error)
+	// Create a symbolic link at newname pointing to oldname.
+	// It returns an error if the symlink creation fails.
+	Symlink(oldname, newname string) error
 }

@@ -421,3 +421,9 @@ func (fs *OsFileSystem) WriteFromReaderAt(file IFile, reader io.Reader, offset i
 
 	return io.Copy(file, reader)
 }
+
+// Symlink creates a symbolic link at newname pointing to oldname.
+// It returns an error if the symlink creation fails.
+func (fs *OsFileSystem) Symlink(oldname, newname string) error {
+	return os.Symlink(oldname, newname)
+}

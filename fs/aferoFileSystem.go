@@ -1,6 +1,7 @@
 package fs
 
 import (
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -577,4 +578,17 @@ func (fs *AferoFileSystem) WriteFromReaderAt(file IFile, reader io.Reader, offse
 	}
 
 	return io.Copy(file, reader)
+}
+
+// Symlink creates a symbolic link at newname pointing to oldname.
+// It returns an error if the symlink creation fails.
+func (fs *AferoFileSystem) Symlink(oldname, newname string) error {
+	//#TODO: Afero memory fs does not support symlink, create a symlink map[string]string to support it.
+	//#NOTE: Performance is not as much of a priority as compatibility, so we can use a map to store symlink relationships.
+	return &os.LinkError{
+		Op:  "symlink",
+		Old: oldname,
+		New: newname,
+		Err: fmt.Errorf("AferoFileSystem only supports symlink when underlying fs is OsFs"),
+	}
 }
