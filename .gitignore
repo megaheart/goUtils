@@ -39,3 +39,4 @@ www
 dist/
 **/env.go
 **/*.log
+.crush/

@@ -1,12 +1,33 @@
 package fs
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"syscall"
 )
 
+// Explain all file operations that can be observed by the file watcher. These operations are represented as bitmask values,
+// allowing for multiple operations to be combined.
+//
+// With FILE:
+//   - Create: A new pathname was created.
+//   - Write: The pathname was written to; this does *not* mean the write has finished, and a write can be followed by more writes.
+//   - Remove: The path was removed; any watches on it will be removed. Some "remove" operations may trigger a Rename if the file is actually moved (for example "remove to trash" is often a rename).
+//   - Rename: The path was renamed to something else; any watches on it will be removed.
+//   - Chmod: File attributes were changed. It's generally not recommended to take action on this event, as it may get triggered very frequently by some software. For example, Spotlight indexing on macOS, anti-virus software, backup software, etc.
+//   - xUnportableOpen: File descriptor was opened. Only works on Linux and FreeBSD.
+//   - xUnportableRead: File was read from. Only works on Linux and FreeBSD.
+//   - xUnportableCloseWrite: File opened for writing was closed. Only works on Linux and FreeBSD. The advantage of using this over Write is that it's more reliable than waiting for Write events to stop. It's also faster (if you're not listening to Write events): copying a file of a few GB can easily generate tens of thousands of Write events in a short span of time.
+//   - xUnportableCloseRead: File opened for reading was closed. Only works on Linux and FreeBSD.
+//
+// With FOLDER:
+//   - Create: A new child pathname was created in the folder.
+//   - Write: A child pathname was written to in the folder; this does *not* mean the write has finished, and a write can be followed by more writes.
+//   - Remove: A child path was removed from the folder; any watches on it will be removed. Some "remove" operations may trigger a Rename if the file is actually moved (for example "remove to trash" is often a rename).
+//   - Rename: A child path was renamed to something else in the folder; any watches on it will be removed.
+//   - Chmod: A child pathname's attributes were changed in the folder. It's generally not recommended to take action on this event, as it may get triggered very frequently by some software. For example, Spotlight indexing on macOS, anti-virus software, backup software, etc.
 type FileOp uint32
 
 // The operations watcher can trigger
@@ -59,6 +80,41 @@ const (
 	// Only works on Linux and FreeBSD.
 	FileOp_xUnportableCloseRead
 )
+
+func (op FileOp) String() string {
+	var ops []string
+	if op&FileOp_Create == FileOp_Create {
+		ops = append(ops, "Create")
+	}
+	if op&FileOp_Write == FileOp_Write {
+		ops = append(ops, "Write")
+	}
+	if op&FileOp_Remove == FileOp_Remove {
+		ops = append(ops, "Remove")
+	}
+	if op&FileOp_Rename == FileOp_Rename {
+		ops = append(ops, "Rename")
+	}
+	if op&FileOp_Chmod == FileOp_Chmod {
+		ops = append(ops, "Chmod")
+	}
+	if op&FileOp_xUnportableOpen == FileOp_xUnportableOpen {
+		ops = append(ops, "xUnportableOpen")
+	}
+	if op&FileOp_xUnportableRead == FileOp_xUnportableRead {
+		ops = append(ops, "xUnportableRead")
+	}
+	if op&FileOp_xUnportableCloseWrite == FileOp_xUnportableCloseWrite {
+		ops = append(ops, "xUnportableCloseWrite")
+	}
+	if op&FileOp_xUnportableCloseRead == FileOp_xUnportableCloseRead {
+		ops = append(ops, "xUnportableCloseRead")
+	}
+	if len(ops) == 0 {
+		return "Unknown"
+	}
+	return fmt.Sprintf("%v", ops)
+}
 
 const (
 	// Exactly one of O_RDONLY, O_WRONLY, or O_RDWR must be specified.

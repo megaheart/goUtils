@@ -37,6 +37,27 @@ const (
 	ZapLogger_Format_ReadableText
 )
 
+type ZapLogger_Level int
+
+const (
+	ZapLogger_Level_Debug = iota - 1
+	ZapLogger_Level_Info
+	ZapLogger_Level_Warn
+	ZapLogger_Level_Error
+	ZapLogger_Level_DPanic
+	ZapLogger_Level_Panic
+	ZapLogger_Level_Fatal
+
+	ZapLogger_Level_Min = ZapLogger_Level_Debug
+	ZapLogger_Level_Max = ZapLogger_Level_Fatal
+
+	ZapLogger_Level_Invalid = ZapLogger_Level_Max + 1
+)
+
+func (l ZapLogger_Level) ToZapLevel() zapcore.Level {
+	return zapcore.Level(l) // Map Debug=0 to zapcore.DebugLevel=-1, Info=1 to zapcore.InfoLevel=0, etc.
+}
+
 // ZapcoreSamplerOption configures zapcore's sampling behavior.
 //
 // This struct maps directly to the parameters accepted by
@@ -98,7 +119,7 @@ func NewZapLogger(
 	timeLayout string,
 	outputType ZapLogger_Output,
 	logPath string,
-	level zapcore.Level,
+	level ZapLogger_Level,
 	samplerOption *ZapcoreSamplerOption,
 ) ILogger {
 	var cores []zapcore.Core
@@ -112,7 +133,7 @@ func NewZapLogger(
 		} else {
 			enc = buildJSONEncoder()
 		}
-		cores = append(cores, zapcore.NewCore(enc, zapcore.AddSync(os.Stdout), level))
+		cores = append(cores, zapcore.NewCore(enc, zapcore.AddSync(os.Stdout), level.ToZapLevel()))
 
 	case ZapLogger_Output_File:
 		// file: plain output (no color) — JSON is recommended
@@ -123,7 +144,7 @@ func NewZapLogger(
 		} else {
 			enc = buildJSONEncoder()
 		}
-		cores = append(cores, zapcore.NewCore(enc, fileWS, level))
+		cores = append(cores, zapcore.NewCore(enc, fileWS, level.ToZapLevel()))
 
 	case ZapLogger_Output_ConsoleAndFile:
 		// console (colored) + file (non-colored / JSON)
@@ -139,14 +160,14 @@ func NewZapLogger(
 		fileWS := fileSink(logPath)
 
 		cores = append(cores,
-			zapcore.NewCore(consoleEnc, consoleWS, level),
-			zapcore.NewCore(fileEnc, fileWS, level),
+			zapcore.NewCore(consoleEnc, consoleWS, level.ToZapLevel()),
+			zapcore.NewCore(fileEnc, fileWS, level.ToZapLevel()),
 		)
 
 	default:
 		// fallback: colored console
 		enc := buildConsoleEncoder(timeLayout, true)
-		cores = append(cores, zapcore.NewCore(enc, zapcore.AddSync(os.Stdout), level))
+		cores = append(cores, zapcore.NewCore(enc, zapcore.AddSync(os.Stdout), level.ToZapLevel()))
 	}
 
 	// combine cores into a single core
