@@ -1,5 +1,5 @@
 package main
 
 func main() {
-	Test_FileWatcher()
+	Test_FileWatcher_LogRotate()
 }

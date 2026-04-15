@@ -82,6 +82,7 @@ func NewFileWatcher(
 	return &FileWatcher{
 		watcher:           nil,
 		watchFileEventMap: make(map[string][]*FileWatchInfo),
+		watchFolderMap:    make(map[string]int),
 		logger:            logger,
 		fs:                fs,
 		DebounceTime:      debounceTime,

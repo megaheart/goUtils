@@ -1,0 +1,5 @@
+bạn thấy hàm Test_FileWatcher_LogRotate và Test_FileWatcher_FileModify trong file test_exec/filewatch.go không? Hãy giúp tôi hoàn thiện 2 hàm đó để tôi có thể test được FileWatcher.WatchFile với trường hợp:
+- Test_FileWatcher_LogRotate: test xem khi watch với chế độ FileWatchMode_Replace cho file dist/log.log thì khi file này bị xoay log (log rotate) thì hàm onChange có được gọi hay không và gọi có đúng thời điểm hay không, nếu được bạn thêm cho tôi github.com/nxadm/tail và tail thử file dist/log.log in ra màn hình để tôi xem nó có in ra full nội dung của cả log cũ và mới ko. Bạn triển khai luôn việc xoay log trong hàm test này luôn nhé.
+- Test_FileWatcher_FileModify: test xem khi watch với chế độ FileWatchMode_Modify cho file dist/hi thì khi file này bị sửa đổi kiểu write lại content và sửa đổi kiểu rename thì hàm onChange có được gọi hay không, nội dung in ra có chuẩn ko.
+2 Hàm test này là hàm test kiểu chạy tay rồi con người review thôi
+---------------------------------------------------------
