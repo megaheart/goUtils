@@ -67,108 +67,89 @@ func Test_OsFileWatcher() {
 }
 
 func Test_FileWatcher_LogRotate() {
-	logger := log.NewZapLogger(
-		log.ZapLogger_Format_ReadableText,
-		"2026-01-02 15:04:05.000",
-		log.ZapLogger_Output_Console,
-		"",
-		log.ZapLogger_Level_Debug,
-		nil,
-	)
-
-	osFs := fs.NewFileSystem()
-	if err := osFs.MakeDirAll("dist", 0755); err != nil {
-		panic(err)
-	}
-	logPath, err := filepath.Abs("dist/log.log")
+	path, err := filepath.Abs("dist/hi")
 	if err != nil {
 		panic(err)
 	}
-	rotatedPath := logPath + ".1"
-
-	_ = os.Remove(rotatedPath)
-	if err := os.WriteFile(logPath, []byte("[old-1] seed old log\n"), 0644); err != nil {
-		panic(err)
-	}
-
-	t, err := tail.TailFile(logPath, tail.Config{
-		Follow:    true,
-		ReOpen:    true,
-		MustExist: false,
-		Poll:      true,
-		Location: &tail.SeekInfo{
-			Offset: 0,
-			Whence: 0,
-		},
-	})
-	if err != nil {
-		panic(err)
-	}
-	defer t.Cleanup()
-	defer t.Stop()
 
 	go func() {
-		for line := range t.Lines {
-			if line == nil {
-				continue
+		// Simulate log rotation by renaming the file every 5 seconds
+		// Print 1 line log per second to the file
+		fs := fs.NewFileSystem()
+		distDir := filepath.Dir(path)
+		if err := fs.MakeDirAll(distDir, 0755); err != nil {
+			panic(err)
+		}
+
+		lineTicker := time.NewTicker(1 * time.Second)
+		rotateTicker := time.NewTicker(5 * time.Second)
+		defer lineTicker.Stop()
+		defer rotateTicker.Stop()
+
+		var lineNo int64 = 0
+		for {
+			select {
+			case <-lineTicker.C:
+				lineNo++
+				line := fmt.Sprintf("[%s] line=%d simulated log\n", time.Now().Format("15:04:05.000"), lineNo)
+				if _, err := fs.AppendFile(path, []byte(line)); err != nil {
+					fmt.Printf("[SIM][%s] append log error: %v\n", time.Now().Format("15:04:05.000"), err)
+				}
+			case <-rotateTicker.C:
+				rotatedPath := fmt.Sprintf("%s.%d", path, time.Now().UnixNano())
+				if err := fs.MoveFile(path, rotatedPath); err != nil {
+					if !fs.IsNotExistError(err) {
+						fmt.Printf("[SIM][%s] rotate error: %v\n", time.Now().Format("15:04:05.000"), err)
+					}
+					continue
+				}
+				fmt.Printf("[SIM][%s] rotated => %s\n", time.Now().Format("15:04:05.000"), rotatedPath)
 			}
-			fmt.Printf("[TAIL][%s] %s\n", time.Now().Format("15:04:05.000"), line.Text)
 		}
 	}()
 
-	fw := fsUtils.NewFileWatcher(logger, osFs, 200*time.Millisecond)
-	defer fw.Close()
+	go func() {
+		logger := log.NewZapLogger(
+			log.ZapLogger_Format_ReadableText,
+			"2026-01-02 15:04:05.000",
+			log.ZapLogger_Output_Console,
+			"",
+			log.ZapLogger_Level_Debug,
+			nil,
+		)
+		// Read log by github.com/nxadm/tail + fs_utils.FileWatcher, and print log content to console
+		fs := fs.NewFileSystem()
+		watcher := fsUtils.NewFileWatcher(logger, fs, 200*time.Millisecond)
+		defer watcher.Close()
 
-	var mu sync.Mutex
-	onChangeTimes := make([]time.Time, 0)
-	onChange := func() error {
-		mu.Lock()
-		now := time.Now()
-		onChangeTimes = append(onChangeTimes, now)
-		idx := len(onChangeTimes)
-		mu.Unlock()
-
-		data, readErr := os.ReadFile(logPath)
-		if readErr != nil {
-			fmt.Printf("[onChange #%d][%s] read error: %v\n", idx, now.Format("15:04:05.000"), readErr)
+		doNewest := fsUtils.NewDoNewest()
+		watcher.WatchFile(path, fsUtils.FileWatchMode_Replace, func() error {
+			logger.Warn("File changed, start tailing file: " + path)
+			t, err := tail.TailFile(path, tail.Config{
+				Follow:    true,
+				ReOpen:    false,
+				MustExist: false,
+				Poll:      false,
+			})
+			if err != nil {
+				logger.Error("Failed to tail file", log.LogError(err))
+				return nil
+			}
+			doNewest.Do(func() {
+				t.Cleanup()
+				t.Stop()
+			})
+			go func() {
+				for line := range t.Lines {
+					logger.Info("[TAIL] " + line.Text)
+				}
+			}()
 			return nil
-		}
-		fmt.Printf("[onChange #%d][%s] current dist/log.log content:\n%s", idx, now.Format("15:04:05.000"), string(data))
-		return nil
-	}
+		})
+	}()
 
-	if err := fw.WatchFile(logPath, fsUtils.FileWatchMode_Replace, onChange); err != nil {
-		panic(err)
-	}
-
-	time.Sleep(400 * time.Millisecond)
-	if err := os.WriteFile(logPath, []byte("[old-1] seed old log\n[old-2] append before rotate\n"), 0644); err != nil {
-		panic(err)
-	}
-
-	time.Sleep(400 * time.Millisecond)
-	rotateStart := time.Now()
-	fmt.Printf("[ACTION][%s] start rotate dist/log.log\n", rotateStart.Format("15:04:05.000"))
-	if err := os.Rename(logPath, rotatedPath); err != nil {
-		panic(err)
-	}
-	if err := os.WriteFile(logPath, []byte("[new-1] new file after rotate\n"), 0644); err != nil {
-		panic(err)
-	}
-	if f, err := os.OpenFile(logPath, os.O_APPEND|os.O_WRONLY, 0644); err == nil {
-		_, _ = f.WriteString("[new-2] append after rotate\n")
-		_ = f.Close()
-	}
-
-	time.Sleep(1200 * time.Millisecond)
-	mu.Lock()
-	count := len(onChangeTimes)
-	for i, ts := range onChangeTimes {
-		fmt.Printf("[SUMMARY] onChange #%d at %s (delta from rotate start: %s)\n", i+1, ts.Format("15:04:05.000"), ts.Sub(rotateStart).String())
-	}
-	mu.Unlock()
-	fmt.Printf("[SUMMARY] total onChange calls = %d\n", count)
-	fmt.Printf("[SUMMARY] rotated file kept at: %s\n", rotatedPath)
+	// Press Ctrl+C to stop the test after observing the log rotation behavior for a while
+	select {}
 }
 
 func Test_FileWatcher_FileModify() {

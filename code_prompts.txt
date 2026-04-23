@@ -3,3 +3,34 @@ bạn thấy hàm Test_FileWatcher_LogRotate và Test_FileWatcher_FileModify tro
 - Test_FileWatcher_FileModify: test xem khi watch với chế độ FileWatchMode_Modify cho file dist/hi thì khi file này bị sửa đổi kiểu write lại content và sửa đổi kiểu rename thì hàm onChange có được gọi hay không, nội dung in ra có chuẩn ko.
 2 Hàm test này là hàm test kiểu chạy tay rồi con người review thôi
 ---------------------------------------------------------
+T có 1 struct A thực hiện nhiệm vụ sau:
+```
+watcher := fsUtils.NewFileWatcher(logger, fs, 200*time.Millisecond)
+defer watcher.Close()
+
+x := NewA()
+watcher.WatchFile(path, fsUtils.FileWatchMode_Replace, func() error {
+    t, err := tail.TailFile(path, tail.Config{
+        Follow:    true,
+        ReOpen:    true,
+        MustExist: false,
+        Poll:      true,
+    })
+    if err != nil {
+        logger.Error("Failed to tail file", log.LogError(err))
+        return nil
+    }
+    x.StartNewWatchSession(func() {
+        // Clear old watch session
+        t.Clearup()
+    })
+    go func() {
+        for line := range t.Lines {
+            logger.Info("[TAIL] " + line.Text)
+        }
+    }()
+    return nil
+})
+```
+
+t đang không biết đặt tên struct A là gì biết rằng nó là 1 struct kiểu sync

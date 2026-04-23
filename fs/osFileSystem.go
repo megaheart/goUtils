@@ -38,7 +38,6 @@ func (w *OsFileWatcher) Events() <-chan FileEvent {
 					Op:   FileOp(evt.Op),
 				}
 			}
-			close(w.watcher.Events)
 			close(w.events)
 		}()
 	})
