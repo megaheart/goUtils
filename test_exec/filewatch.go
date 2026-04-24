@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -11,7 +13,6 @@ import (
 	"github.com/megaheart/goUtils/fs"
 	fsUtils "github.com/megaheart/goUtils/fs/utils"
 	"github.com/megaheart/goUtils/log"
-	"github.com/nxadm/tail"
 )
 
 func Test_OsFileWatcher() {
@@ -122,26 +123,36 @@ func Test_FileWatcher_LogRotate() {
 		watcher := fsUtils.NewFileWatcher(logger, fs, 200*time.Millisecond)
 		defer watcher.Close()
 
-		doNewest := fsUtils.NewDoNewest()
+		// doNewest := concurrency.NewDoNewest()
 		watcher.WatchFile(path, fsUtils.FileWatchMode_Replace, func() error {
-			logger.Warn("File changed, start tailing file: " + path)
-			t, err := tail.TailFile(path, tail.Config{
-				Follow:    true,
-				ReOpen:    false,
-				MustExist: false,
-				Poll:      false,
-			})
-			if err != nil {
-				logger.Error("Failed to tail file", log.LogError(err))
-				return nil
-			}
-			doNewest.Do(func() {
-				t.Cleanup()
-				t.Stop()
-			})
 			go func() {
-				for line := range t.Lines {
-					logger.Info("[TAIL] " + line.Text)
+				logger.Warn("File changed, start tailing file: " + path)
+				f, err := os.Open(path) // giữ inode hiện tại
+				if err != nil {
+					logger.Error("Error opening file: "+path, log.LogError(err))
+					return
+				}
+				defer f.Close()
+
+				r := bufio.NewReader(f)
+				latestTailTime := time.Now()
+				for {
+					line, err := r.ReadString('\n')
+					if err == nil {
+						logger.Info("[TAIL] " + line)
+						latestTailTime = time.Now()
+						continue
+					}
+					if errors.Is(err, io.EOF) {
+						if time.Since(latestTailTime) > 10*time.Second {
+							logger.Info("No new log line for 10 seconds, stop tailing file: " + path)
+							return
+						}
+						time.Sleep(3000 * time.Millisecond) // chờ log append thêm
+						continue
+					}
+					logger.Error("Error reading file: "+path, log.LogError(err))
+					return
 				}
 			}()
 			return nil

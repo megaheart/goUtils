@@ -292,7 +292,7 @@ func (fw *FileWatcher) InitWatcher() {
 				fw.logger.Error("Error creating watcher", log.LogError(err))
 			}
 
-			for path := range fw.watchFileEventMap {
+			for path := range fw.watchFolderMap {
 				err = fw.watcher.Add(path)
 				if err != nil {
 					fw.logger.Error("Error while adding file to watcher", log.LogError(err))
