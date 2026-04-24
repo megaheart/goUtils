@@ -132,6 +132,7 @@ func Test_FileWatcher_LogRotate() {
 				return err
 			}
 			doNewest.Do(func() {
+				time.Sleep(5000 * time.Millisecond)
 				lines.Close()
 			})
 			skipOld = false // only skip old logs for the first time, after that always read all logs in the file, even after log rotation, to avoid missing any log line

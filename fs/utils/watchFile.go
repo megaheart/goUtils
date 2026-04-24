@@ -106,7 +106,8 @@ func (fw *FileWatcher) WatchFile(path string, mode FileWatchMode, onChange func(
 	// fw.systemCtrl.BlockRuntimeCall("FileWatcher.WatchFile")
 	absolutePath, err := filepath.Abs(path)
 	if err != nil {
-		fw.logger.Fatal("Error getting absolute path: " + err.Error())
+		fw.logger.Error("Error getting absolute path: " + err.Error())
+		return err
 	}
 
 	stat, err := fw.fs.Stat(absolutePath)
@@ -121,15 +122,15 @@ func (fw *FileWatcher) WatchFile(path string, mode FileWatchMode, onChange func(
 	err = onChange()
 
 	if err != nil {
-		fw.logger.Fatal("Error calling onChange function when init watcher: " + err.Error())
+		fw.logger.Error("Error calling onChange function when init watcher: " + err.Error())
+		return err
 	}
 
 	if fw.watcher == nil {
-		fw.InitWatcher()
-	}
-
-	if err != nil {
-		fw.logger.Error("Error while adding file to watcher", log.LogError(err))
+		err := fw.InitWatcher()
+		if err != nil {
+			return err
+		}
 	}
 
 	if f, ok := fw.watchFileEventMap[absolutePath]; ok {
@@ -273,12 +274,13 @@ func (fw *FileWatcher) Close() error {
 }
 
 // Initializa watcher
-func (fw *FileWatcher) InitWatcher() {
+func (fw *FileWatcher) InitWatcher() error {
 	var err error
 	fw.watcher, err = fw.fs.NewFileWatcher()
 
 	if err != nil {
 		fw.logger.Error("Error creating watcher", log.LogError(err))
+		return err
 	}
 
 	go func() {
@@ -290,6 +292,8 @@ func (fw *FileWatcher) InitWatcher() {
 			fw.watcher, err = fw.fs.NewFileWatcher()
 			if err != nil {
 				fw.logger.Error("Error creating watcher", log.LogError(err))
+				time.Sleep(100 * time.Millisecond)
+				continue
 			}
 
 			for path := range fw.watchFolderMap {
@@ -300,6 +304,7 @@ func (fw *FileWatcher) InitWatcher() {
 			}
 		}
 	}()
+	return nil
 }
 
 // Reads a JSON file and parses it into a struct
