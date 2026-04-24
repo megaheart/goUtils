@@ -13,7 +13,12 @@ type TailLine struct {
 	Err  error
 }
 
-func TailFilePolling_DependOnINode(path string, skipOld bool, pollInterval, timeout time.Duration) (chan TailLine, error) {
+type TailLines struct {
+	Lines chan TailLine
+	Close func() error
+}
+
+func TailFilePolling_DependOnINode(path string, skipOld bool, pollInterval time.Duration) (*TailLines, error) {
 	f, err := os.Open(path) // keep current inode
 	if err != nil {
 		return nil, err
@@ -26,20 +31,22 @@ func TailFilePolling_DependOnINode(path string, skipOld bool, pollInterval, time
 		}
 	}
 	lines := make(chan TailLine)
+	isClose := false
 	go func() {
 		defer f.Close()
 		defer close(lines)
 		r := bufio.NewReader(f)
-		latestTailTime := time.Now()
 		for {
+			if isClose {
+				return
+			}
 			line, err := r.ReadString('\n')
 			if err == nil {
 				lines <- TailLine{Line: line, Err: nil}
-				latestTailTime = time.Now()
 				continue
 			}
 			if errors.Is(err, io.EOF) {
-				if time.Since(latestTailTime) > timeout {
+				if isClose {
 					return
 				}
 				time.Sleep(pollInterval) // chờ log append thêm
@@ -49,6 +56,12 @@ func TailFilePolling_DependOnINode(path string, skipOld bool, pollInterval, time
 			return
 		}
 	}()
-	return lines, nil
+	return &TailLines{
+		Lines: lines,
+		Close: func() error {
+			isClose = true
+			return f.Close()
+		},
+	}, nil
 
 }

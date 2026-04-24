@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/megaheart/goUtils/concurrency"
 	"github.com/megaheart/goUtils/fs"
 	fsUtils "github.com/megaheart/goUtils/fs/utils"
 	"github.com/megaheart/goUtils/log"
@@ -123,15 +124,19 @@ func Test_FileWatcher_LogRotate() {
 
 		// doNewest := concurrency.NewDoNewest()
 		skipOld := true
+		doNewest := concurrency.NewDoNewest()
 		watcher.WatchFile(path, fsUtils.FileWatchMode_Replace, func() error {
-			lines, err := fsUtils.TailFilePolling_DependOnINode(path, skipOld, 200*time.Millisecond, 10*time.Second)
+			lines, err := fsUtils.TailFilePolling_DependOnINode(path, skipOld, 200*time.Millisecond)
 			if err != nil {
 				fmt.Printf("[TAIL][%s] error initializing tail: %v\n", time.Now().Format("15:04:05.000"), err)
 				return err
 			}
+			doNewest.Do(func() {
+				lines.Close()
+			})
 			skipOld = false // only skip old logs for the first time, after that always read all logs in the file, even after log rotation, to avoid missing any log line
 			go func() {
-				for line := range lines {
+				for line := range lines.Lines {
 					if line.Err != nil {
 						fmt.Printf("[TAIL][%s] error: %v\n", time.Now().Format("15:04:05.000"), line.Err)
 						continue
