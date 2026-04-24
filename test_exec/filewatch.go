@@ -1,10 +1,8 @@
 package main
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -124,36 +122,23 @@ func Test_FileWatcher_LogRotate() {
 		defer watcher.Close()
 
 		// doNewest := concurrency.NewDoNewest()
+		skipOld := true
 		watcher.WatchFile(path, fsUtils.FileWatchMode_Replace, func() error {
+			lines, err := fsUtils.TailFilePolling_DependOnINode(path, skipOld, 200*time.Millisecond, 10*time.Second)
+			if err != nil {
+				fmt.Printf("[TAIL][%s] error initializing tail: %v\n", time.Now().Format("15:04:05.000"), err)
+				return err
+			}
+			skipOld = false // only skip old logs for the first time, after that always read all logs in the file, even after log rotation, to avoid missing any log line
 			go func() {
-				logger.Warn("File changed, start tailing file: " + path)
-				f, err := os.Open(path) // giữ inode hiện tại
-				if err != nil {
-					logger.Error("Error opening file: "+path, log.LogError(err))
-					return
-				}
-				defer f.Close()
-
-				r := bufio.NewReader(f)
-				latestTailTime := time.Now()
-				for {
-					line, err := r.ReadString('\n')
-					if err == nil {
-						logger.Info("[TAIL] " + line)
-						latestTailTime = time.Now()
+				for line := range lines {
+					if line.Err != nil {
+						fmt.Printf("[TAIL][%s] error: %v\n", time.Now().Format("15:04:05.000"), line.Err)
 						continue
 					}
-					if errors.Is(err, io.EOF) {
-						if time.Since(latestTailTime) > 10*time.Second {
-							logger.Info("No new log line for 10 seconds, stop tailing file: " + path)
-							return
-						}
-						time.Sleep(3000 * time.Millisecond) // chờ log append thêm
-						continue
-					}
-					logger.Error("Error reading file: "+path, log.LogError(err))
-					return
+					fmt.Printf("[TAIL][%s] %s", time.Now().Format("15:04:05.000"), line.Line)
 				}
+				fmt.Printf("[TAIL][%s] stop tailing file (channel closed)\n", time.Now().Format("15:04:05.000"))
 			}()
 			return nil
 		})
