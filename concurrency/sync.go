@@ -1,4 +1,4 @@
-package fsUtils
+package concurrency
 
 import "sync"
 

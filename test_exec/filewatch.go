@@ -8,10 +8,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/megaheart/goUtils/concurrency"
 	"github.com/megaheart/goUtils/fs"
 	fsUtils "github.com/megaheart/goUtils/fs/utils"
 	"github.com/megaheart/goUtils/log"
-	"github.com/nxadm/tail"
 )
 
 func Test_OsFileWatcher() {
@@ -122,27 +122,29 @@ func Test_FileWatcher_LogRotate() {
 		watcher := fsUtils.NewFileWatcher(logger, fs, 200*time.Millisecond)
 		defer watcher.Close()
 
-		doNewest := fsUtils.NewDoNewest()
+		// doNewest := concurrency.NewDoNewest()
+		skipOld := true
+		doNewest := concurrency.NewDoNewest()
 		watcher.WatchFile(path, fsUtils.FileWatchMode_Replace, func() error {
-			logger.Warn("File changed, start tailing file: " + path)
-			t, err := tail.TailFile(path, tail.Config{
-				Follow:    true,
-				ReOpen:    false,
-				MustExist: false,
-				Poll:      false,
-			})
+			lines, err := fsUtils.TailFilePolling_DependOnINode(path, skipOld, 200*time.Millisecond)
 			if err != nil {
-				logger.Error("Failed to tail file", log.LogError(err))
-				return nil
+				fmt.Printf("[TAIL][%s] error initializing tail: %v\n", time.Now().Format("15:04:05.000"), err)
+				return err
 			}
 			doNewest.Do(func() {
-				t.Cleanup()
-				t.Stop()
+				time.Sleep(5000 * time.Millisecond)
+				lines.Close()
 			})
+			skipOld = false // only skip old logs for the first time, after that always read all logs in the file, even after log rotation, to avoid missing any log line
 			go func() {
-				for line := range t.Lines {
-					logger.Info("[TAIL] " + line.Text)
+				for line := range lines.Lines {
+					if line.Err != nil {
+						fmt.Printf("[TAIL][%s] error: %v\n", time.Now().Format("15:04:05.000"), line.Err)
+						continue
+					}
+					fmt.Printf("[TAIL][%s] %s", time.Now().Format("15:04:05.000"), line.Line)
 				}
+				fmt.Printf("[TAIL][%s] stop tailing file (channel closed)\n", time.Now().Format("15:04:05.000"))
 			}()
 			return nil
 		})
