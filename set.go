@@ -147,5 +147,9 @@ func NewNonEmptySet[T any](initSet []T, compare func(a, b T) int) *Set[T] {
 	copy(s.Array, initSet)
 	slices.SortFunc(s.Array, compare)
 	s.compare = compare
+	// remove duplicates
+	s.Array = slices.CompactFunc(s.Array, func(a, b T) bool {
+		return compare(a, b) == 0
+	})
 	return s
 }

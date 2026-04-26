@@ -154,5 +154,7 @@ func NewPrimitiveSetWithInitValues[T IComparable](initValues []T) *PrimitiveSet[
 	s.Array = make([]T, len(initValues))
 	copy(s.Array, initValues)
 	slices.Sort(s.Array)
+	// remove duplicates
+	s.Array = slices.Compact(s.Array)
 	return s
 }
