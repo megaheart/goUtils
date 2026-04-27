@@ -286,6 +286,7 @@ func ParseParamsAndSubCommands[T any](defaultValue T, envVarNamePrefix string, o
 func getEnvVarNameFromAppParamName(kebab string, envVarNamePrefix string) string {
 	result := strings.ToUpper(kebab)
 	result = strings.ReplaceAll(result, "-", "_")
+	result = strings.ReplaceAll(result, ".", "__")
 	result = envVarNamePrefix + result
 	return result
 }
