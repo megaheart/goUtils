@@ -40,7 +40,7 @@ const (
 type ZapLogger_Level int
 
 const (
-	ZapLogger_Level_Debug = iota - 1
+	ZapLogger_Level_Debug ZapLogger_Level = iota - 1
 	ZapLogger_Level_Info
 	ZapLogger_Level_Warn
 	ZapLogger_Level_Error
